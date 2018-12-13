@@ -7,7 +7,7 @@ from __future__ import division, absolute_import, print_function
 import re
 import numpy as np
 import warnings
-
+import re
 # Internal dependencies
 from .path import Path, Line, QuadraticBezier, CubicBezier, Arc
 
@@ -40,6 +40,7 @@ def parse_path(pathdef, current_pos=0j, tree_element=None):
     elements = list(_tokenize_path(pathdef))
     # Reverse for easy use of .pop()
     elements.reverse()
+
 
     if tree_element is None:
         segments = Path()
@@ -194,10 +195,24 @@ def parse_path(pathdef, current_pos=0j, tree_element=None):
             rotation = float(elements.pop())
             arc = float(elements.pop())
             sweep = float(elements.pop())
-            end = float(elements.pop()) + float(elements.pop()) * 1j
+
+            end = float(elements.pop())
+            if elements[-1].replace('.','',1).isdigit():
+                end += float(elements.pop()) * 1j
 
             if not absolute:
                 end += current_pos
+
+            if radius.real == 0 or radius.imag == 0:
+                continue
+            #     radius = 1e-10 + 1j*radius.imag
+
+            # if radius.imag == 0:
+            #     radius = radius.real + 1j*1e-10
+
+
+            if current_pos == end:
+                continue
 
             segments.append(Arc(current_pos, radius, rotation, arc, sweep, end))
             current_pos = end
@@ -222,6 +237,37 @@ def _parse_transform_substr(transform_substr):
 
     type_str, value_str = transform_substr.split('(')
     value_str = value_str.replace(',', ' ')
+
+    index = 0
+
+    while True:
+        if '-' not in value_str[index:]:
+            break
+
+        m = re.search("[eE]-",value_str[index:])
+        if m is not None:
+            index += m.end()
+            continue
+
+        index = value_str.index('-', index)
+        if index > 0 and value_str[index-1] != ' ':
+            value_str = value_str[:index] + ' ' + value_str[index:]
+            index = index+2
+        else:
+            index = index+1
+
+    index = 0
+
+    while True:
+        m = re.search("[-\\d+\\s]\\.\\d+\\.",value_str[index:])
+        if m is None:
+            break
+
+        index1 = value_str.index('.',index + m.start())
+        index = value_str.index('.',index1+1)
+        value_str = value_str[:index] + ' ' + value_str[index:]
+
+
     values = list(map(float, filter(None, value_str.split(' '))))
 
     transform = np.identity(3)

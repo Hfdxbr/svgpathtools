@@ -6,6 +6,7 @@ from __future__ import division, absolute_import, print_function
 from xml.dom.minidom import parse
 from os import path as os_path, getcwd
 import re
+import math
 
 # Internal dependencies
 from .parser import parse_path
@@ -23,26 +24,43 @@ def path2pathd(path):
 def ellipse2pathd(ellipse):
     """converts the parameters from an ellipse or a circle to a string for a 
     Path object d-attribute"""
-
-    cx = ellipse.get('cx', 0)
-    cy = ellipse.get('cy', 0)
+    cx = ellipse.get('cx', None)
+    cy = ellipse.get('cy', None)
     rx = ellipse.get('rx', None)
     ry = ellipse.get('ry', None)
     r = ellipse.get('r', None)
 
     if r is not None:
-        rx = ry = float(r)
-    else:
-        rx = float(rx)
-        ry = float(ry)
+        rx = ry = 0 if (r == "0INVALID" or r == "NaN") else float(r.replace('px', ''))
+    elif rx is not None:
+        rx = 0 if (rx == "0INVALID" or rx == "NaN") else float(rx.replace('px', ''))
+    elif ry is not None:
+        ry = 0 if (ry == "0INVALID" or ry == "NaN") else float(ry.replace('px', ''))
 
-    cx = float(cx)
-    cy = float(cy)
+    if rx is None:
+        rx = 0
+    if ry is None:
+        ry = 0
+
+
+    if cx is None:
+        cx = 0
+    else:
+        cx = float(cx.replace('px', ''))
+
+    if cy is None:
+        cy = 0
+    else:
+        cy = float(cy.replace('px', ''))
+
 
     d = ''
     d += 'M' + str(cx - rx) + ',' + str(cy)
     d += 'a' + str(rx) + ',' + str(ry) + ' 0 1,0 ' + str(2 * rx) + ',0'
     d += 'a' + str(rx) + ',' + str(ry) + ' 0 1,0 ' + str(-2 * rx) + ',0'
+
+    if r == "NaN" or rx == "NaN" or ry == "NaN":
+        return ''
 
     return d
 
@@ -50,7 +68,7 @@ def ellipse2pathd(ellipse):
 def polyline2pathd(polyline_d, is_polygon=False):
     """converts the string from a polyline points-attribute to a string for a
     Path object d-attribute"""
-    points = COORD_PAIR_TMPLT.findall(polyline_d)
+    points = COORD_PAIR_TMPLT.findall(polyline_d.attrib['points'])
     closed = (float(points[0][0]) == float(points[-1][0]) and
               float(points[0][1]) == float(points[-1][1]))
 
@@ -80,18 +98,31 @@ def rect2pathd(rect):
     
     The rectangle will start at the (x,y) coordinate specified by the 
     rectangle object and proceed counter-clockwise."""
-    x0, y0 = float(rect.get('x', 0)), float(rect.get('y', 0))
-    w, h = float(rect.get('width', 0)), float(rect.get('height', 0))
+    try:
+        x0, y0 = float(rect.get('x', 0)), float(rect.get('y', 0))
+        w, h = float(rect.get('width', 0)), float(rect.get('height', 0))
+    except:
+        x0 = y0 = 0
+        w = h = 0
+
+
     x1, y1 = x0 + w, y0
     x2, y2 = x0 + w, y0 + h
     x3, y3 = x0, y0 + h
-
     d = ("M{} {} L {} {} L {} {} L {} {} z"
          "".format(x0, y0, x1, y1, x2, y2, x3, y3))
     return d
 
 def line2pathd(l):
-    return 'M' + l['x1'] + ' ' + l['y1'] + 'L' + l['x2'] + ' ' + l['y2']
+    if 'x1' not in l.attrib:
+        l.attrib['x1'] = '0'
+    if 'x2' not in l.attrib:
+        l.attrib['x2'] = '0'
+    if 'y1' not in l.attrib:
+        l.attrib['y1'] = '0'
+    if 'y2' not in l.attrib:
+        l.attrib['y2'] = '0'
+    return 'M' + l.attrib['x1'] + ' ' + l.attrib['y1'] + 'L' + l.attrib['x2'] + ' ' + l.attrib['y2']
 
 def svg2paths(svg_file_location,
               return_svg_attributes=False,

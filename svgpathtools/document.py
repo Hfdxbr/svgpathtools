@@ -135,10 +135,16 @@ def flatten_all_paths(group, group_filter=lambda x: True,
         # data, parse the element after confirming that the path_filter
         # accepts it.
         for key, converter in path_conversions.items():
+            # if key == 'polygon':
+            #     print('skipping ' + key)
+            #     continue
             for path_elem in filter(path_filter, top.group.iterfind(
                     'svg:'+key, SVG_NAMESPACE)):
                 path_tf = top.transform.dot(
                     parse_transform(path_elem.get('transform')))
+
+                # print(path_elem.attrib)
+                # print(converter)
                 path = transform(parse_path(converter(path_elem)), path_tf)
                 paths.append(FlattenedPath(path, path_elem, path_tf))
 

@@ -201,6 +201,7 @@ def translate(curve, z0):
     elif isinstance(curve, Arc):
         new_start = curve.start + z0
         new_end = curve.end + z0
+
         return Arc(new_start, radius=curve.radius, rotation=curve.rotation,
                    large_arc=curve.large_arc, sweep=curve.sweep, end=new_end)
     else:
@@ -258,6 +259,8 @@ def scale(curve, sx, sy=None, origin=0j):
 def transform(curve, tf):
     """Transforms the curve by the homogeneous transformation matrix tf"""
     def to_point(p):
+        if p is None:
+            return np.array([[0], [0], [1.0]])
         return np.array([[p.real], [p.imag], [1.0]])
 
     def to_vector(z):
@@ -267,7 +270,12 @@ def transform(curve, tf):
         return v.item(0) + 1j * v.item(1)
 
     if isinstance(curve, Path):
-        return Path(*[transform(segment, tf) for segment in curve])
+        tmp = []
+        for segment in curve:
+            xxx = transform(segment, tf)
+            if xxx is not None:
+                tmp.append(xxx)
+        return Path(*tmp)
     elif is_bezier_segment(curve):
         return bpoints2bezier([to_complex(tf.dot(to_point(p)))
                                for p in curve.bpoints()])
@@ -275,6 +283,14 @@ def transform(curve, tf):
         new_start = to_complex(tf.dot(to_point(curve.start)))
         new_end = to_complex(tf.dot(to_point(curve.end)))
         new_radius = to_complex(tf.dot(to_vector(curve.radius)))
+        if new_radius.real == 0 or new_radius.imag == 0:
+            return None
+        # if new_radius.real == 0:
+        #     new_radius = 1e-10 + 1j*new_radius.imag
+
+        # if new_radius.imag == 0:
+        #     new_radius = new_radius.real + 1j*1e-10
+
         return Arc(new_start, radius=new_radius, rotation=curve.rotation,
                    large_arc=curve.large_arc, sweep=curve.sweep, end=new_end)
     else:
@@ -422,8 +438,10 @@ def segment_length(curve, start, end, start_point, end_point,
     first_half = abs(mid_point - start_point)
     second_half = abs(end_point - mid_point)
 
+
     length2 = first_half + second_half
-    if (length2 - length > error) or (depth < min_depth):
+
+    if ((abs(length2 - length) > error) and (length2 - length)/length > error) or (depth < min_depth):
         # Calculate the length of each segment:
         depth += 1
         return (segment_length(curve, start, mid, start_point, mid_point,
@@ -2213,6 +2231,8 @@ class Path(MutableSequence):
         return self.start == self.end
 
     def _is_closable(self):
+        if len(self._segments) <= 0:
+            return False
         end = self[-1].end
         for segment in self:
             if segment.start == end:
@@ -2235,8 +2255,8 @@ class Path(MutableSequence):
     @closed.setter
     def closed(self, value):
         value = bool(value)
-        if value and not self._is_closable():
-            raise ValueError("End does not coincide with a segment start.")
+        # if value and not self._is_closable():
+            # raise ValueError("End does not coincide with a segment start.")
         self._closed = value
 
     @property
@@ -2440,7 +2460,7 @@ class Path(MutableSequence):
     #         Ts += [self.t2T(i, t) for t in seg.icurvature(kappa)]
     #     return Ts
 
-    def area(self, chord_length=1e-4):
+    def area(self, chord_length=1e-2):
         """Find area enclosed by path.
         
         Approximates any Arc segments in the Path with lines
@@ -2475,9 +2495,10 @@ class Path(MutableSequence):
 
         def seg2lines(seg):
             """Find piecewise-linear approximation of `seg`."""
-            num_lines = int(ceil(seg.length() / chord_length))
-            pts = [seg.point(t) for t in np.linspace(0, 1, num_lines+1)]
-            return [Line(pts[i], pts[i+1]) for i in range(num_lines)]
+            num_lines = ceil(seg.length() / chord_length)
+            tvals = np.linspace(0, seg.length(), num_lines)
+            return [Line(seg.point(tvals[i]), seg.point(tvals[i+1]))
+                    for i in range(len(tvals)-1)]
 
         assert self.isclosed()
 
