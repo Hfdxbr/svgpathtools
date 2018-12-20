@@ -32,6 +32,14 @@ def _tokenize_path(pathdef):
             yield token
 
 
+def isfloat(value):
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
+
+
 def parse_path(pathdef, current_pos=0j, tree_element=None):
     # In the SVG specs, initial movetos are absolute, even if
     # specified as 'm'. This is the default behavior here as well.
@@ -197,12 +205,13 @@ def parse_path(pathdef, current_pos=0j, tree_element=None):
             sweep = float(elements.pop())
 
             end = float(elements.pop())
-            if elements[-1].replace('.','',1).isdigit():
+            if isfloat(elements[-1]):
                 end += float(elements.pop()) * 1j
 
             if not absolute:
                 end += current_pos
 
+            # print("asd", radius.real)
             if radius.real == 0 or radius.imag == 0:
                 continue
             #     radius = 1e-10 + 1j*radius.imag
@@ -214,7 +223,7 @@ def parse_path(pathdef, current_pos=0j, tree_element=None):
             if current_pos == end:
                 continue
 
-            segments.append(Arc(current_pos, radius, rotation, arc, sweep, end))
+            segments.append(Arc(current_pos, radius, rotation, arc, sweep, end, None))
             current_pos = end
 
     return segments

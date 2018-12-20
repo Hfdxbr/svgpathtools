@@ -185,7 +185,7 @@ def rotate(curve, degs, origin=None):
         new_end = transform(curve.end)
         new_rotation = curve.rotation + degs
         return Arc(new_start, radius=curve.radius, rotation=new_rotation,
-                   large_arc=curve.large_arc, sweep=curve.sweep, end=new_end)
+                   large_arc=curve.large_arc, sweep=curve.sweep, tf=None, end=new_end)
     else:
         raise TypeError("Input `curve` should be a Path, Line, "
                         "QuadraticBezier, CubicBezier, or Arc object.")
@@ -203,7 +203,7 @@ def translate(curve, z0):
         new_end = curve.end + z0
 
         return Arc(new_start, radius=curve.radius, rotation=curve.rotation,
-                   large_arc=curve.large_arc, sweep=curve.sweep, end=new_end)
+                   large_arc=curve.large_arc, sweep=curve.sweep, tf=None, end=new_end)
     else:
         raise TypeError("Input `curve` should be a Path, Line, "
                         "QuadraticBezier, CubicBezier, or Arc object.")
@@ -247,6 +247,7 @@ def scale(curve, sx, sy=None, origin=0j):
                        rotation=curve.rotation, 
                        large_arc=curve.large_arc, 
                        sweep=curve.sweep, 
+                       tf=None,
                        end=sx*(curve.end - origin) + origin)
         else:
             raise Exception("\nFor `Arc` objects, only scale transforms "
@@ -280,19 +281,22 @@ def transform(curve, tf):
         return bpoints2bezier([to_complex(tf.dot(to_point(p)))
                                for p in curve.bpoints()])
     elif isinstance(curve, Arc):
-        new_start = to_complex(tf.dot(to_point(curve.start)))
-        new_end = to_complex(tf.dot(to_point(curve.end)))
-        new_radius = to_complex(tf.dot(to_vector(curve.radius)))
-        if new_radius.real == 0 or new_radius.imag == 0:
-            return None
-        # if new_radius.real == 0:
-        #     new_radius = 1e-10 + 1j*new_radius.imag
+        return Arc(curve.start, radius=curve.radius, rotation=curve.rotation,
+                   large_arc=curve.large_arc, sweep=curve.sweep, tf=tf, end=curve.end)
+        # new_start = to_complex(tf.dot(to_point(curve.start)))
+        # new_end = to_complex(tf.dot(to_point(curve.end)))
+        # new_radius = to_complex(tf.dot(to_vector(curve.radius)))
+        # print("tf")
+        # if new_radius.real == 0 or new_radius.imag == 0:
+        #     return None
+        # # if new_radius.real == 0:
+        # #     new_radius = 1e-10 + 1j*new_radius.imag
 
-        # if new_radius.imag == 0:
-        #     new_radius = new_radius.real + 1j*1e-10
+        # # if new_radius.imag == 0:
+        # #     new_radius = new_radius.real + 1j*1e-10
 
-        return Arc(new_start, radius=new_radius, rotation=curve.rotation,
-                   large_arc=curve.large_arc, sweep=curve.sweep, end=new_end)
+        # return Arc(new_start, radius=new_radius, rotation=curve.rotation,
+        #            large_arc=curve.large_arc, sweep=curve.sweep, end=new_end)
     else:
         raise TypeError("Input `curve` should be a Path, Line, "
                         "QuadraticBezier, CubicBezier, or Arc object.")
@@ -1254,7 +1258,7 @@ class CubicBezier(object):
 
 
 class Arc(object):
-    def __init__(self, start, radius, rotation, large_arc, sweep, end,
+    def __init__(self, start, radius, rotation, large_arc, sweep, end, tf,
                  autoscale_radius=True):
         """
         This should be thought of as a part of an ellipse connecting two
@@ -1333,6 +1337,7 @@ class Arc(object):
         assert start != end
         assert radius.real != 0 and radius.imag != 0
 
+        self.tf = tf
         self.start = start
         self.radius = abs(radius.real) + 1j*abs(radius.imag)
         self.rotation = rotation
@@ -1360,6 +1365,7 @@ class Arc(object):
         return self.start == other.start and self.end == other.end \
             and self.radius == other.radius \
             and self.rotation == other.rotation \
+            and self.tf == other.tf \
             and self.large_arc == other.large_arc and self.sweep == other.sweep
 
     def __ne__(self, other):
@@ -1390,6 +1396,10 @@ class Arc(object):
         # Note: an ellipse going through start and end with radius and phi
         # exists if and only if radius_check is true
         radius_check = (x1p_sqd/rx_sqd) + (y1p_sqd/ry_sqd)
+        if abs(rx_sqd) < 1e-8 or abs(ry_sqd) < 1e-8:
+            radius_check = 0
+
+        # print("asd", radius_check, self.radius)
         if radius_check > 1:
             if self.autoscale_radius:
                 rx *= sqrt(radius_check)
@@ -1399,6 +1409,8 @@ class Arc(object):
                 ry_sqd = ry*ry
             else:
                 raise ValueError("No such elliptic arc exists.")
+
+        # print(self.radius)
 
         # Compute c'=(c_x', c_y'), the center of the ellipse in (x', y') coords
         # Noting that, in our new coord system, (x_2', y_2') = (-x_1', -x_2')
@@ -1475,9 +1487,15 @@ class Arc(object):
 
     def point(self, t):
         if t == 0:
-            return self.start
+            if self.tf is None:
+                return self.start
+            tmp = (self.tf.dot(  np.array([[self.start.real], [self.start.imag], [1.0]])))
+            return complex(tmp[0], tmp[1])
         if t == 1:
-            return self.end
+            if self.tf is None:
+                return self.end
+            tmp = (self.tf.dot(  np.array([[self.end.real], [self.end.imag], [1.0]])))
+            return complex(tmp[0], tmp[1])
         angle = radians(self.theta + t*self.delta)
         cosphi = self.rot_matrix.real
         sinphi = self.rot_matrix.imag
@@ -1487,7 +1505,12 @@ class Arc(object):
         # z = self.rot_matrix*(rx*cos(angle) + 1j*ry*sin(angle)) + self.center
         x = rx*cosphi*cos(angle) - ry*sinphi*sin(angle) + self.center.real
         y = rx*sinphi*cos(angle) + ry*cosphi*sin(angle) + self.center.imag
-        return complex(x, y)
+
+        if self.tf is None:
+            return complex(x, y)
+
+        tmp = (self.tf.dot( np.array([[x], [y], [1.0]])))
+        return complex(tmp[0], tmp[1])
 
     def point_to_t(self, point):
         """If the point lies on the Arc, returns its `t` parameter.
@@ -1744,7 +1767,7 @@ class Arc(object):
 
     def reversed(self):
         """returns a copy of the Arc object with its orientation reversed."""
-        return Arc(self.end, self.radius, self.rotation, self.large_arc,
+        return Arc(self.end, self.radius, self.rotation, self.large_arc, self.tf,
                    not self.sweep, self.start)
 
     def phase2t(self, psi):
@@ -1991,7 +2014,7 @@ class Arc(object):
             new_large_arc = 1
         return Arc(self.point(t0), radius=self.radius, rotation=self.rotation,
                    large_arc=new_large_arc, sweep=self.sweep,
-                   end=self.point(t1), autoscale_radius=self.autoscale_radius)
+                   end=self.point(t1), tf=self.tf, autoscale_radius=self.autoscale_radius)
 
     def radialrange(self, origin, return_all_global_extrema=False):
         """returns the tuples (d_min, t_min) and (d_max, t_max) which minimize
