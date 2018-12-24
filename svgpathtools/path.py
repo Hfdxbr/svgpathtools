@@ -1081,13 +1081,13 @@ class CubicBezier(object):
     def point(self, t):
         """Evaluate the cubic Bezier curve at t using Horner's rule."""
         # algebraically equivalent to
-        # P0*(1-t)**3 + 3*P1*t*(1-t)**2 + 3*P2*(1-t)*t**2 + P3*t**3
+        return self.start*(1-t)**3 + 3*self.control1*t*(1-t)**2 + 3*self.control2*(1-t)*t**2 + self.end*t**3
         # for (P0, P1, P2, P3) = self.bpoints()
-        return self.start + t*(
-            3*(self.control1 - self.start) + t*(
-                3*(self.start + self.control2) - 6*self.control1 + t*(
-                    -self.start + 3*(self.control1 - self.control2) + self.end
-                )))
+        # return self.start + t*(
+        #     3*(self.control1 - self.start) + t*(
+        #         3*(self.start + self.control2) - 6*self.control1 + t*(
+        #             -self.start + 3*(self.control1 - self.control2) + self.end
+        #         )))
 
     def length(self, t0=0, t1=1, error=LENGTH_ERROR, min_depth=LENGTH_MIN_DEPTH):
         """Calculate the length of the path up to a certain position"""
