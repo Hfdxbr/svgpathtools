@@ -1310,13 +1310,13 @@ class Arc(object):
         -----------------------------
         self.theta : float
             This is the phase (in degrees) of self.u1transform(self.start).
-            It is $\theta_1$ in the official documentation and ranges from
+            It is $\\theta_1$ in the official documentation and ranges from
             -180 to 180.
         self.delta : float
             This is the angular distance (in degrees) between the start and
             end of the arc after the arc has been sent to the unit circle
             through self.u1transform().
-            It is $\Delta\theta$ in the official documentation and ranges from
+            It is $\\Delta\\theta$ in the official documentation and ranges from
             -360 to 360; being positive when the arc travels CCW and negative
             otherwise (i.e. is positive/negative when sweep == True/False).
         self.center : complex
